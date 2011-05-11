@@ -1,0 +1,200 @@
+#!/bin/sh
+BINMP3GAIN=`which mp3gain 2> /dev/null`
+BINFIND=`which find 2> /dev/null`
+BINCHOWN=`which chown 2> /dev/null`
+BINCHMOD=`which chmod 2> /dev/null`
+BINAWK=`which awk 2> /dev/null`
+BINSED=`which sed 2> /dev/null`
+BINGREP=`which grep 2> /dev/null`
+
+MP3DIR="/home/music"
+OWNER="root:root"
+PERMD="755"
+PERMF="644"
+STATSFILE="./mp3stats"
+PAGETITLE="MP3 Files"
+
+REMUN="n"
+CHOWNPRM="n"
+GAIN="n"
+OUTPUT="html"
+
+# Set ownership and permissions
+if [ $CHOWNPRM == "y" ]; then
+echo "Setting ownership and permissions: "
+   $BINCHOWN -R $OWNER $MP3DIR
+   $BINFIND $MP3DIR -type d -exec $BINCHMOD $PERMD {} \;
+   $BINFIND $MP3DIR -type f -iname '*.mp3' -exec $BINCHMOD $PERMF {} \;
+fi
+
+# Find and remove unnecessary files
+# shoould fix this to be more gracefull
+if [ "$REMUN" == "y" ]; then
+   # TODO : add this to a loop
+   echo "Removing non-MP3 files: "
+   $BINFIND $MP3DIR -type f -iname '*.db' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.doc' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.gif' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.htm' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.html' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.ini' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.jpg' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.jpeg' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.lnk' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.m3u' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.nfo' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.pls' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.sfv' -exec rm {} \;
+   $BINFIND $MP3DIR -type f -iname '*.txt' -exec rm {} \;
+   echo "Removing empty directories"
+   $BINFIND $MP3DIR -empty -exec rm -rf {} \;
+fi
+
+# Run mp3gain to level tracks
+if [ "$GAIN" == "y" ]; then
+   echo "Volume Leveling using \"$BINMP3GAIN\""
+   $BINFIND $MP3DIR -type f -name *.mp3 -exec \
+      $BINMP3GAIN -a -k {} \; > /dev/null
+fi
+
+# Generate TXT List
+if [ "$OUTPUT" == "txt" ]; then
+   echo "Generated on:  `date`" > "$STATSFILE.txt"
+   echo "For files found in \"$MP3DIR\"" >> "$STATSFILE.txt"
+
+   echo -n "Total Number of Tracks:  " >> "$STATSFILE.txt"
+   $BINFIND "$MP3DIR" -iname '*.mp3' | wc -l |
+      $BINSED -r ':L;s=\b([0-9]+)([0-9]{3})\b=\1,\2=g;t L'>> "$STATSFILE.txt"
+
+   echo -n "Total Space Used:        " >> "$STATSFILE.txt"
+   du -ch $MP3DIR | $BINGREP total | $BINSED -e "s/total//g" >> "$STATSFILE.txt"
+   echo "" >> "$STATSFILE.txt"
+
+   echo "#### Album List #################################" >> "$STATSFILE.txt"
+   $BINFIND "$MP3DIR" -type d | $BINSED -e "s#$MP3DIR/##g" | $BINGREP '/' | \
+      sort >> "$STATSFILE.txt"
+fi
+
+# Generate HTML list
+if [ "$OUTPUT" == "html" ]; then
+   echo "Generating $STATSFILE.html"
+   #echo "" > "$STATSFILE.html"
+   cat <<EOF > "$STATSFILE.html"
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+"http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<title="$PAGETITLE">
+<style>
+BODY {
+   background: #006;
+   margin: 0px;
+   padding: 0px;
+   font-size: 10px;
+}
+
+H1 {
+   color: #00a;
+   margin: 0;
+   padding: 0;
+   text-align: center;
+}
+
+H2 {
+   margin: 0;
+   padding-top: 15px;
+   padding-bottom: 10px;
+}
+
+H3 {
+   margin: 0;
+   margin-left: 10px;
+}
+
+P {
+   margin: 0 0 0 10px;
+}
+
+UL {
+   margin-top: 0;
+}
+
+.container {
+   width: 400px;
+   margin: 0 auto 0 auto;
+   background: #eee;
+}
+
+.header {
+   padding 8px;
+   color: #00a;
+   font-size: 24px;
+   text-align: center;
+}
+
+.statistics {
+   padding: 0px 8px 10px 8px;
+}
+
+.mainBody {
+   padding: 0px 8px 10px 8px;
+}
+
+.footer {
+   width: 100%;
+   background: #800;
+   color: #fff;
+   font-size: 10px;
+   text-align: center;
+   padding: 10px 0 10px 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">$PAGETITLE</div>
+EOF
+
+   # BEGIN STATISTICS SECTION
+   echo "<div class=\"statistics\"><h2>Stats</h2><p>" >> "$STATSFILE.html"
+
+   echo -n "Total Number of Tracks:  <b>" >> "$STATSFILE.html"
+   $BINFIND "$MP3DIR" -iname '*.mp3' | wc -l |
+      $BINSED -r ':L;s=\b([0-9]+)([0-9]{3})\b=\1,\2=g;t L'>> "$STATSFILE.html"
+   echo "</b><br>" >> "$STATSFILE.html"
+
+   echo -n "Total Space Used: <b>" >> "$STATSFILE.html"
+   du -ch $MP3DIR | $BINGREP total | $BINSED -e "s/total//g" >> "$STATSFILE.html"
+   echo "</b></p></div>" >> "$STATSFILE.html"
+
+   # BEGIN MAIN BODY
+   echo "<div class=\"mainBody\"><h2>Album Listing</h2>" >> "$STATSFILE.html"
+
+   $BINFIND "$MP3DIR" -type d | $BINSED -e "s#$MP3DIR/##g" | $BINGREP '/' | \
+         sort | $BINAWK 'BEGIN { FS = "/"; part="NULL"; cart="NULL" }
+                        $2 ~ /[0-9]*-/ {
+                        part=cart
+                        cart=$1
+                        palb=calb
+                        gsub("-", " ", $2)
+                        calb=$2
+                        if ( cart != part && NR < 3 )
+                           print "<h3>", cart, "</h3>\n<ul>\n<li>", calb, "</li>"
+                        else if ( cart != part )
+                           print "</ul>\n<h3>", cart, "</h3>\n<ul>\n<li>", calb, "</li>"
+                        else if ( calb != palb )
+                           print "<li>", calb, "</li>"}
+                        ' >> "$STATSFILE.html"
+
+   echo "</div>" >> "$STATSFILE.html"
+   
+   # BEGIN FOOTER
+   echo "<div class=\"footer\">" >> "$STATSFILE.html"
+   echo "`date`" >> "$STATSFILE.html" >> "$STATSFILE.html"
+   echo "<br><i>\"$MP3DIR\"</i>" >> "$STATSFILE.html"
+
+   echo "</div>" >> "$STATSFILE.html"
+   
+   # CLOSE CONTAINER & HTML
+   echo "</div></body></html>" >> "$STATSFILE.html"
+fi

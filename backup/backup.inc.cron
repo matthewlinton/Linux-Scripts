@@ -1,0 +1,96 @@
+#!/bin/sh
+# backup.full.cron
+# Creates an incrimental backup using dar
+# 2008-02-21
+
+PROGNAME=$(basename $0)                 # Program name
+HOST="`hostname`"			# Host name
+
+BINDAR="/usr/bin/dar"
+DARSTATICBIN="/usr/bin/dar_static"	# Location of static dar
+BAKDIR="backup"				# Directory to put the backups in
+					# relative to the root directory
+DATE=`date -I`				# Date
+LOGFILE="/var/log/darbackup"		# Logfile
+NICENESS=20				# Niceness
+TESTBACKUP=0                            # Test the backup after it's complete
+DELOLD=1				# Delete old backups
+USER="root"				# User who will own backup
+GROUP="root"				# Group who will own backup
+FPERM="600"
+DPERM="700"
+
+# UNIVERSAL DAR OPTIONS ###################
+MINCOMPRESS=256
+SLICESIZE="1024M"
+NOCOMPRESS="-an -Z *.mov -Z *.gz -Z *.bz -Z *.bz2 -Z *.zip -Z *.png -Z *.avi -Z *.mp3 -Z *.dmg -Z *.jpg -Z *.jpeg"
+
+# MAKE SURE WE'RE GOOD TO GO ##############
+if [ `whoami` != "root" ]; then
+   echo "$PROGNAME requires it be run as root" >> "$LOGFILE"
+   exit 1
+fi
+
+if [ ! -x "$BINDAR" ]; then
+   echo "Cannot find $BINDAR" >> $LOGFILE
+   echo "$DATE : Unable to execute $BINDAR" >> "$LOGFILE"
+   exit 1
+fi
+
+# BACKUP HOME DIRECTORIES #################
+ROOTDIR="/home"
+FBACKUP="/$BAKDIR$ROOTDIR/$DATE-$HOST-home-INC"
+IGNORE="-an -P *trash* -P psycoth/downloads"
+XOPTS=""
+if [ ! -d "`dirname $FBACKUP`" ]; then
+   echo "Backup directory does not exist" >> "$LOGFILE"
+   echo "`dirname $FBACKUP`" >> "$LOGFILE"
+   echo "Waiting for full backup to be created first" >> "$LOGFILE"
+   exit 1
+fi
+
+LATEST=`ls /$BAKDIR$ROOTDIR/*.dar | tail -n 1 | awk -F '.' '{print $1}'`
+
+echo "Starting backup of $ROOTDIR on `date`" >> $LOGFILE
+nice -n $NICENESS $BINDAR -v -M -m $MINCOMPRESS -y -s $SLICESIZE -D \
+-R $ROOTDIR -c $FBACKUP $NOCOMPRESS $IGNORE $XOPTS \
+-E "chown $USER:$GROUP $FBACKUP.%n.%e" -E "chmod $FPERM $FBACKUP.%n.%e" \
+-A "$LATEST" 2>> "$LOGFILE"
+
+if [ $TESTBACKUP -eq 1 ]; then
+   echo "Starting test of full backup on `date`" >> "$LOGFILE"
+   if $BINDAR -t $FBACKUP 2>> $LOGFILE ; then
+      echo "Backup successfully tested, finished at `date`" >> "$LOGFILE"
+   else
+      echo "ERROR: Backup failed test, finished at `date`" >> "$LOGFILE"
+   fi
+fi
+
+# BACKUP ETC ##############################
+ROOTDIR="/etc"
+FBACKUP="/$BAKDIR$ROOTDIR/$DATE-$HOST-home-INC"
+IGNORE=""
+XOPTS=""
+if [ ! -d "`dirname $FBACKUP`" ]; then
+   echo "Backup directory does not exist" >> "$LOGFILE"
+   echo "`dirname $FBACKUP`" >> "$LOGFILE"
+   echo "Waiting for full backup to be created first" >> "$LOGFILE"
+   exit 1
+fi
+
+LATEST=`ls /$BAKDIR$ROOTDIR/*.dar | tail -n 1 | awk -F '.' '{print $1}'`
+
+echo "Starting backup of $ROOTDIR on `date`" >> $LOGFILE
+nice -n $NICENESS $BINDAR -v -M -m $MINCOMPRESS -y -s $SLICESIZE -D \
+-R $ROOTDIR -c $FBACKUP $NOCOMPRESS $IGNORE $XOPTS \
+-E "chown $USER:$GROUP $FBACKUP.%n.%e" -E "chmod $FPERM $FBACKUP.%n.%e" \
+-A "$LATEST" 2>> "$LOGFILE"
+
+if [ $TESTBACKUP -eq 1 ]; then
+   echo "Starting test of full backup on `date`" >> "$LOGFILE"
+   if $BINDAR -t $FBACKUP 2>> $LOGFILE ; then
+      echo "Backup successfully tested, finished at `date`" >> "$LOGFILE"
+   else
+      echo "ERROR: Backup failed test, finished at `date`" >> "$LOGFILE"
+   fi
+fi
